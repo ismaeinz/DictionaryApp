@@ -16,21 +16,36 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     private val dictionaryRepository: DictionaryRepository,
 ) : ViewModel() {
-    //createStateflow
-    private val _mainState =
-        MutableStateFlow(MainState())
+
+    private val _mainState = MutableStateFlow(MainState())
     val mainState = _mainState.asStateFlow()
-    private val searchJob: Job? = null
-    fun onEvent(mainUiEvents: MainUiEvents) {
-        when (mainUiEvents) {
+
+    private var searchJob: Job? = null
+
+    init {
+        _mainState.update {
+            it.copy(searchWord = "Word")
+        }
+
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            loadWordResult()
+        }
+    }
+
+    fun onEvent(mainUiEvent: MainUiEvents) {
+        when (mainUiEvent) {
             MainUiEvents.OnSearchClick -> {
-                loadWordResult()
+                searchJob?.cancel()
+                searchJob = viewModelScope.launch {
+                    loadWordResult()
+                }
             }
 
             is MainUiEvents.OnSearchWordChange -> {
-                _mainState.update { word ->
-                    word.copy(
-                        searchWord = mainUiEvents.newWord.lowercase().toString()
+                _mainState.update {
+                    it.copy(
+                        searchWord = mainUiEvent.newWord.lowercase()
                     )
                 }
             }
@@ -43,21 +58,19 @@ class MainViewModel @Inject constructor(
                 mainState.value.searchWord
             ).collect { result ->
                 when (result) {
-                    is Result.Error<*> -> Unit
-                    is Result.Loading<*> -> {
+                    is Result.Error -> Unit
+
+                    is Result.Loading -> {
                         _mainState.update {
-                            it.copy(
-                                isLoading = result.isLoading
-                            )
+                            it.copy(isLoading = result.isLoading)
                         }
                     }
 
-                    is Result.Success<*> -> {
+                    is Result.Success -> {
                         result.data?.let { wordItem ->
                             _mainState.update {
                                 it.copy(
                                     wordItem = wordItem
-
                                 )
                             }
                         }
